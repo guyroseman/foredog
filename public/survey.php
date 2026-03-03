@@ -11,14 +11,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['weekend'])) {
         'experience'     => $_POST['experience'] ?? '',
         'has_kids'       => 'no',
     ];
-    $breedSlug = Survey::recommend($answers);
-    $_SESSION['recommended_breed'] = $breedSlug;
-    $_SESSION['quiz_answers']      = $answers;
-    $_SESSION['quiz_trait']        = $_POST['trait'] ?? '';
+
+    $topBreeds = Survey::recommend($answers);
+    $primaryBreed = $topBreeds[0];
+    
+    $_SESSION['recommended_breed'] = $primaryBreed;
+    $_SESSION['runner_ups'] = array_slice($topBreeds, 1, 2); // Grab 2nd and 3rd place
+    $_SESSION['quiz_answers'] = $answers;
+    $_SESSION['quiz_trait'] = $_POST['trait'] ?? '';
+    
     $db = Database::getInstance();
-    $db->prepare('INSERT IGNORE INTO survey_sessions (session_id, recommended_breed_slug) VALUES (?, ?)')->execute([session_id(), $breedSlug]);
+    $db->prepare('INSERT IGNORE INTO survey_sessions (session_id, recommended_breed_slug) VALUES (?, ?)')->execute([session_id(), $primaryBreed]);
+    
     header('Content-Type: application/json');
-    echo json_encode(['redirect' => '/breed.php?match=' . urlencode($breedSlug)]);
+    echo json_encode(['redirect' => '/breed.php?match=' . urlencode($primaryBreed)]);
     exit;
 }
 require __DIR__ . '/../templates/header.php';
@@ -47,7 +53,8 @@ body{background:var(--bark);}
 .tile{border:2px solid var(--sand);border-radius:14px;padding:1.1rem .75rem .9rem;cursor:pointer;transition:all .18s;background:var(--cream);text-align:center;display:flex;flex-direction:column;align-items:center;gap:.35rem;font-family:'DM Sans',sans-serif;}
 .tile:hover{border-color:var(--amber);background:#FFF8F2;transform:translateY(-3px);box-shadow:0 8px 24px rgba(200,115,42,.18);}
 .tile.selected{border-color:var(--amber);background:var(--amber);}
-.tile-emoji{font-size:2rem;line-height:1.1;}
+.tile-icon{color:var(--amber);margin-bottom:8px;transition:color .2s;}
+.tile.selected .tile-icon{color:var(--white);}
 .tile-label{font-weight:500;font-size:.9rem;color:var(--bark);}
 .tile.selected .tile-label{color:var(--white);}
 .tile-sub{font-size:.72rem;color:var(--muted);line-height:1.3;}
@@ -87,29 +94,28 @@ body{background:var(--bark);}
     <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:25%"></div></div>
   </div>
 
-  <!-- STEP 1 -->
   <div class="quiz-step active" data-step="1">
     <p class="step-eyebrow">Your Lifestyle</p>
     <h2 class="step-question">What does your perfect weekend look like?</h2>
     <div class="step-hint"><strong>Why we ask:</strong> Matching a dog's energy to your lifestyle is the #1 predictor of a successful, lifelong adoption.</div>
     <div class="tiles">
       <button type="button" class="tile" data-name="weekend" data-value="low">
-        <span class="tile-emoji">&#128715;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M2 14v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2"></path><path d="M2 10a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4H2z"></path><path d="M6 18v2"></path><path d="M18 18v2"></path></svg></div>
         <span class="tile-label">Couch &amp; Netflix</span>
         <span class="tile-sub">Relaxed, slow-paced days</span>
       </button>
       <button type="button" class="tile" data-name="weekend" data-value="active">
-        <span class="tile-emoji">&#127939;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m8 3 4 8 5-5 5 15H2L8 3z"></path></svg></div>
         <span class="tile-label">Hiking &amp; Running</span>
         <span class="tile-sub">Outdoors, high energy</span>
       </button>
       <button type="button" class="tile" data-name="weekend" data-value="moderate">
-        <span class="tile-emoji">&#128106;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
         <span class="tile-label">Friends &amp; Family</span>
         <span class="tile-sub">Social, lively gatherings</span>
       </button>
       <button type="button" class="tile" data-name="weekend" data-value="moderate">
-        <span class="tile-emoji">&#127961;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path><path d="M12 6h.01"></path><path d="M12 10h.01"></path><path d="M12 14h.01"></path></svg></div>
         <span class="tile-label">Exploring the City</span>
         <span class="tile-sub">Urban walks, cafes, parks</span>
       </button>
@@ -117,24 +123,23 @@ body{background:var(--bark);}
     <input type="hidden" name="weekend" id="input_weekend">
   </div>
 
-  <!-- STEP 2 -->
   <div class="quiz-step" data-step="2">
     <p class="step-eyebrow">Your Home</p>
     <h2 class="step-question">Where will your new best friend be living?</h2>
-    <div class="step-hint"><strong>Did you know?</strong> Some large breeds like Greyhounds thrive in apartments, while some small breeds need constant yard space to burn energy!</div>
+    <div class="step-hint"><strong>Did you know?</strong> Some large breeds like Greyhounds thrive in apartments, while some small breeds need constant yard space!</div>
     <div class="tiles cols-3">
       <button type="button" class="tile" data-name="living" data-value="apartment">
-        <span class="tile-emoji">&#127962;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"></rect><path d="M9 22v-4h6v4"></path><path d="M8 6h.01"></path><path d="M16 6h.01"></path><path d="M12 6h.01"></path><path d="M12 10h.01"></path><path d="M12 14h.01"></path></svg></div>
         <span class="tile-label">Apartment</span>
         <span class="tile-sub">No private outdoor space</span>
       </button>
       <button type="button" class="tile" data-name="living" data-value="house">
-        <span class="tile-emoji">&#127968;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg></div>
         <span class="tile-label">House + Yard</span>
         <span class="tile-sub">Small or medium garden</span>
       </button>
       <button type="button" class="tile" data-name="living" data-value="house">
-        <span class="tile-emoji">&#127963;</span>
+        <div class="tile-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg></div>
         <span class="tile-label">Lots of Land</span>
         <span class="tile-sub">Big open outdoor space</span>
       </button>
@@ -142,24 +147,23 @@ body{background:var(--bark);}
     <input type="hidden" name="living" id="input_living">
   </div>
 
-  <!-- STEP 3 -->
   <div class="quiz-step" data-step="3">
     <p class="step-eyebrow">Your Perfect Companion</p>
     <h2 class="step-question">What trait matters most to you in a dog?</h2>
-    <div class="step-hint"><strong>Why we ask:</strong> Every dog has a dominant personality. Knowing yours helps us find the dog you will genuinely bond with for life.</div>
+    <div class="step-hint"><strong>Why we ask:</strong> Every dog has a dominant personality. Knowing yours helps us find the dog you will genuinely bond with.</div>
     <div class="tiles cols-3">
       <button type="button" class="tile" data-name="trait" data-value="experienced">
-        <span class="tile-emoji">&#128737;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></div>
         <span class="tile-label">Loyal &amp; Protective</span>
         <span class="tile-sub">My guardian and shadow</span>
       </button>
       <button type="button" class="tile" data-name="trait" data-value="some">
-        <span class="tile-emoji">&#129294;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></div>
         <span class="tile-label">Total Cuddle Bug</span>
         <span class="tile-sub">Affectionate and warm</span>
       </button>
       <button type="button" class="tile" data-name="trait" data-value="first">
-        <span class="tile-emoji">&#127941;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg></div>
         <span class="tile-label">Smart &amp; Trainable</span>
         <span class="tile-sub">Learns fast, loves tasks</span>
       </button>
@@ -167,29 +171,28 @@ body{background:var(--bark);}
     <input type="hidden" name="trait" id="input_trait">
   </div>
 
-  <!-- STEP 4 -->
   <div class="quiz-step" data-step="4">
     <p class="step-eyebrow">Your Experience</p>
     <h2 class="step-question">Have you owned a dog before?</h2>
-    <div class="step-hint"><strong>Why we ask:</strong> Some breeds need an experienced hand. We want to match you with a dog you can confidently care for from day one.</div>
+    <div class="step-hint"><strong>Why we ask:</strong> Some breeds need an experienced hand. We want to match you with a dog you can confidently care for.</div>
     <div class="tiles">
       <button type="button" class="tile" data-name="experience" data-value="first">
-        <span class="tile-emoji">&#128003;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"></path></svg></div>
         <span class="tile-label">First-time owner</span>
         <span class="tile-sub">Brand new to dogs</span>
       </button>
       <button type="button" class="tile" data-name="experience" data-value="some">
-        <span class="tile-emoji">&#128049;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg></div>
         <span class="tile-label">Had a dog before</span>
         <span class="tile-sub">Some experience</span>
       </button>
       <button type="button" class="tile" data-name="experience" data-value="experienced">
-        <span class="tile-emoji">&#127942;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg></div>
         <span class="tile-label">Very experienced</span>
         <span class="tile-sub">Multiple dogs, trained them</span>
       </button>
       <button type="button" class="tile" data-name="experience" data-value="some">
-        <span class="tile-emoji">&#128106;</span>
+        <div class="tile-icon"><svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg></div>
         <span class="tile-label">Family decision</span>
         <span class="tile-sub">First dog for the household</span>
       </button>
@@ -206,7 +209,6 @@ body{background:var(--bark);}
 </form>
 </div>
 
-<!-- PROCESSING SCREEN -->
 <div class="proc" id="procScreen">
   <div class="proc-inner">
     <span class="proc-dog">&#128054;</span>
