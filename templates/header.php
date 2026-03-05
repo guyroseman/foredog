@@ -1,12 +1,36 @@
-<?php $currentPage = basename($_SERVER['PHP_SELF'], '.php'); ?>
+<?php 
+// Safety check to prevent "Session already active" PHP notices
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$currentPage = basename($_SERVER['PHP_SELF'], '.php'); 
+
+// Fallback default SEO tags if a specific page doesn't provide them
+$pageTitle = $pageTitle ?? 'Foredog - Premium Pet Adoption Matchmaker';
+$metaDesc = $metaDescription ?? 'Stop searching blindly. Take our matchmaking quiz and let our algorithm pair you with the perfect companion waiting in a local shelter.';
+$ogImg = $ogImage ?? 'https://images.unsplash.com/photo-1543466835-00a73410a2c0?w=800&q=80';
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= $pageTitle ?? 'Foredog - Find Your Perfect Dog' ?></title>
-    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     
+    <title><?= htmlspecialchars($pageTitle) ?></title>
+    <meta name="description" content="<?= htmlspecialchars($metaDesc) ?>">
+    <meta name="robots" content="index, follow">
+    
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<?= htmlspecialchars($pageTitle) ?>">
+    <meta property="og:description" content="<?= htmlspecialchars($metaDesc) ?>">
+    <meta property="og:image" content="<?= htmlspecialchars($ogImg) ?>">
+    
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="<?= htmlspecialchars($pageTitle) ?>">
+    <meta name="twitter:description" content="<?= htmlspecialchars($metaDesc) ?>">
+    <meta name="twitter:image" content="<?= htmlspecialchars($ogImg) ?>">
+
+    <link rel="icon" href="data:;base64,iVBORw0KGgo=">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,600;0,700;1,600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
     <style>

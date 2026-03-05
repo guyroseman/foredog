@@ -31,9 +31,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['weekend'])) {
 require __DIR__ . '/../templates/header.php';
 ?>
 <style>
-body { background: var(--bg-main); }
-.quiz-wrap { min-height: calc(100vh - 80px); display: flex; align-items: center; justify-content: center; padding: 2rem 1.5rem; position: relative; overflow: hidden; }
+/* =========================================================
+   FUNNEL ISOLATION: 
+   Hides the logo, header nav, and footer to prevent drop-off! 
+   ========================================================= */
+header, footer, .site-header, .site-footer, nav { 
+    display: none !important; 
+}
+
+body { background: var(--bg-main); margin: 0; padding: 0; }
+
+/* Changed to 100vh since there is no header taking up space anymore */
+.quiz-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 2rem 1.5rem; position: relative; overflow: hidden; }
 .quiz-wrap::before { content: ''; position: absolute; inset: 0; background: url('https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=1600&q=60') center/cover; opacity: 0.04; z-index: -1; }
+
 .quiz-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); width: 100%; max-width: 640px; padding: 3rem 2.5rem; box-shadow: var(--shadow-soft); position: relative; z-index: 1; }
 .progress-wrap { margin-bottom: 2.5rem; }
 .progress-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }

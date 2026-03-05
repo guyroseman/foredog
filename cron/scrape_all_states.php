@@ -14,15 +14,15 @@ $scrapers = [
     'California' => __DIR__ . '/scrape_california.php',
     'Texas'      => __DIR__ . '/scrape_texas.php',
     'New York'   => __DIR__ . '/scrape_newyork.php',
-    'Washington' => __DIR__ . '/scrape_washington.php',
-    'Florida'    => __DIR__ . '/scrape_florida.php',
-    'Illinois'   => __DIR__ . '/scrape_illinois.php',
+    //'Washington' => __DIR__ . '/scrape_washington.php',
+    //'Florida'    => __DIR__ . '/scrape_florida.php',
+    //'Illinois'   => __DIR__ . '/scrape_illinois.php',
 ];
 
 $startTime = microtime(true);
 echo "╔══════════════════════════════════════════╗\n";
 echo "║     Foredog Master Scraper               ║\n";
-echo "║     " . date('Y-m-d H:i:s') . "                    ║\n";
+echo "║     " . date('Y-m-d H:i:s') . "              ║\n";
 echo "╚══════════════════════════════════════════╝\n\n";
 
 foreach ($scrapers as $state => $file) {

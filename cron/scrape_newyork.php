@@ -1,71 +1,97 @@
 <?php
 /**
- * Foredog — New York Scraper
- *
- * Sources:
- *   1. NYC Animal Care Centers  (NYC Open Data — Socrata)
- *
- * Why not nycacc.app?
- *   nycacc.org is a Flutter web app (Dart compiled to JS rendered in canvas).
- *   There is no HTML to parse. The underlying data comes from NYC Open Data,
- *   which we query directly via the Socrata API.
- *
- * Dataset: https://data.cityofnewyork.us/resource/8nwg-abmf.json
- *   (Animal Care Centers of NYC — Animal Shelter Intakes)
- *
- * Run: php cron/scrape_newyork.php
+ * Foredog Scraper - New York Master
+ * Scrapes Animal Haven (NYC) via Precise HTML Scrape
  */
-
+declare(strict_types=1);
 require_once __DIR__ . '/../src/Database.php';
-require_once __DIR__ . '/scraper_helpers.php';
+require_once __DIR__ . '/scraper_helpers.php'; 
 
-$db     = Database::getInstance();
-$config = require __DIR__ . '/../config.php';
+$db = Database::getInstance();
+$totIns = 0; $totUpd = 0; $totErr = 0;
+echo "\n=== New York Scraper ===\n\n";
 
-$token   = $config['socrata_token'] ?? '';
-$headers = $token ? ["X-App-Token: $token"] : [];
+echo "Scanning: Animal Haven (NYC)...\n";
+$indexUrl = 'https://animalhaven.org/adopt/dogs';
+$indexHtml = fetchUrl($indexUrl);
 
-$totalIns = $totalUpd = 0;
-echo "=== New York Scraper ===\n";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// NYC Animal Care Centers
-// Dataset ID: 8nwg-abmf  — ACC animal intake/outcome data
-// We filter: species=Dog, no outcome yet (still in shelter).
-// ─────────────────────────────────────────────────────────────────────────────
-echo "\n[1/1] NYC Animal Care Centers\n";
-
-$url  = 'https://data.cityofnewyork.us/resource/8nwg-abmf.json'
-      . '?$where=' . urlencode("species='Dog' AND outcome_type IS NULL")
-      . '&$limit=500';
-$body = fetchUrl($url, $headers);
-$rows = $body ? json_decode($body, true) : [];
-
-$found = $ins = $upd = $err = 0;
-foreach ((array) $rows as $d) {
-    $found++;
-    // Borough → city label
-    $borough = $d['intake_condition'] ?? '';
-    $r = upsertDog($db, [
-        'external_id'         => 'NYC-' . ($d['animal_id'] ?? uniqid()),
-        'name'                => $d['animal_name'] ?? 'Unknown',
-        'breed_name'          => $d['primary_breed'] ?? 'Mixed Breed',
-        'age'                 => $d['age_upon_intake'] ?? '',
-        'gender'              => $d['sex_upon_intake'] ?? '',
-        'description'         => trim(($d['color'] ?? '') . ' ' . ($d['primary_breed'] ?? '')),
-        'image_url'           => '',
-        'location'            => 'New York, NY',
-        'city'                => 'New York',
-        'state'               => 'NY',
-        'source_state'        => 'newyork',
-        'owner_contact_name'  => 'NYC Animal Care Centers',
-        'owner_contact_phone' => '(212) 788-4000',
-        'owner_contact_email' => 'info@nycacc.org',
-    ]);
-    if ($r === 'inserted')    { $ins++; $totalIns++; }
-    elseif ($r === 'updated') { $upd++; $totalUpd++; }
-    else $err++;
+$links = [];
+if ($indexHtml) {
+    $xp = getXPath($indexHtml);
+    // FIX: Target only pet profile links
+    foreach($xp->query("//a[contains(@class, 'pet-preview__link')]/@href") as $node) {
+        $link = trim($node->nodeValue);
+        if (!str_starts_with($link, 'http')) {
+            $link = 'https://animalhaven.org' . $link;
+        }
+        if (!in_array($link, $links)) {
+            $links[] = $link;
+        }
+    }
 }
-printSummary('NYC Animal Care Centers', $found, $ins, $upd, $err);
 
-echo "\nNew York total — inserted: $totalIns | updated: $totalUpd\n";
+$linksToFetch = array_slice($links, 0, 15);
+$profilePages = fetchMultiplePages($linksToFetch);
+$found = count($linksToFetch);
+$s = $u = $e = 0;
+
+foreach ($profilePages as $link => $html) {
+    $xp = getXPath($html);
+    
+    $name = cleanName($xp->evaluate("string(//h1[contains(@class, 'pet-profile__name')] | //h1)"));
+    if (!$name) continue;
+
+    // FIX: Grab exactly the list items for Breed and Age to guarantee 100% accuracy
+    $rawGender = $xp->evaluate("normalize-space(//li[contains(@class, 'pet-profile__subtitle-item--gender')]//span)");
+    $rawBreed = $xp->evaluate("normalize-space((//li[contains(@class, 'pet-profile__subtitle-item')])[2])");
+    $rawAge = $xp->evaluate("normalize-space((//li[contains(@class, 'pet-profile__subtitle-item')])[3])");
+    $rawDesc = trim($xp->evaluate("string(//div[contains(@class, 'pet-profile__description-text')])"));
+    
+    // FIX: Only grab the primary gallery image of the dog. Prevents mixing multiple dogs!
+    $rawImages = [];
+    foreach($xp->query("//img[contains(@class, 'pet-gallery__image')]/@src | //img[contains(@class, 'pet-gallery__thumbnail-image')]/@src") as $img) {
+        $src = trim($img->nodeValue);
+        if (!preg_match('/(placeholder)/i', $src)) {
+            $rawImages[] = $src;
+        }
+    }
+    
+    $cleanImages = extractValidImages($rawImages, 'https://animalhaven.org');
+    if (empty($cleanImages)) continue;
+
+    // We pass the exact explicit age here, no paragraph reading!
+    $age = normalizeAge($rawAge);
+    $gender = normalizeGender($rawGender);
+    $breed = $rawBreed ?: 'Mixed Breed';
+    
+    $desc = generateForedogBio($name, $breed, $age, $gender, 'Unknown', $rawDesc);
+
+    $res = upsertDog($db, [
+        'external_id'    => md5($link),
+        'source_shelter' => 'Animal Haven',
+        'source_url'     => $link,
+        'source_state'   => 'newyork',
+        'name'           => $name,
+        'breed_name'     => $breed,
+        'location'       => 'New York, NY',
+        'city'           => 'New York',
+        'state'          => 'NY',
+        'age'            => $age,
+        'gender'         => $gender,
+        'color'          => 'Unknown',
+        'description'    => $desc,
+        'image_url'      => $cleanImages[0] ?? '',
+        'gallery_urls'   => json_encode($cleanImages),
+        'owner_contact_name'  => 'Foredog Matchmaking',
+        'owner_contact_phone' => 'N/A',
+        'owner_contact_email' => 'hello@foredog.com',
+    ]);
+
+    if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
+}
+
+$db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Animal Haven' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
+printSummary('Animal Haven NYC', $found, $s, $u, $e);
+$totIns += $s; $totUpd += $u;
+
+echo "\nNew York total — inserted: $totIns | updated: $totUpd\n";

@@ -1,307 +1,228 @@
 <?php
 /**
- * Foredog Scraper - PREMIUM BIO EDITION
- * Ultra-fast concurrent fetching, strict data filters, and seamless Foredog Bios.
+ * Foredog Scraper - California Master
+ * Scrapes Pasadena Humane (ShelterLuv API), Wags and Walks, and Muttville.
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../src/Database.php';
+require_once __DIR__ . '/scraper_helpers.php'; 
+
 $db = Database::getInstance();
-
-$shelters = [
-    [
-        'name'       => 'Pasadena Humane',
-        'location'   => 'Pasadena, CA',
-        'index_url'  => 'https://pasadenahumane.org/adopt/view-pets/dogs/',
-        'contact'    => ['name'=>'Pasadena Humane', 'phone'=>'(626) 792-7151', 'email'=>'hello@pasadenahumane.org'],
-        'link_xpath' => "//a[contains(@class, 'woocommerce-LoopProduct-link')]/@href",
-        'type'       => 'pasadena'
-    ],
-    [
-        'name'       => 'Wags and Walks',
-        'location'   => 'Los Angeles, CA',
-        'index_url'  => 'https://www.wagsandwalks.org/adopt-la',
-        'contact'    => ['name'=>'Wags and Walks', 'phone'=>'N/A', 'email'=>'info@wagsandwalks.org'],
-        'link_xpath' => "//a[contains(@class, 'summary-thumbnail-container')]/@href",
-        'base_url'   => 'https://www.wagsandwalks.org',
-        'type'       => 'wags'
-    ],
-    [
-        'name'       => 'Muttville Senior Dog Rescue',
-        'location'   => 'San Francisco, CA',
-        'index_url'  => 'https://muttville.org/available_mutts',
-        'contact'    => ['name'=>'Muttville', 'phone'=>'(415) 272-4172', 'email'=>'info@muttville.org'],
-        'link_xpath' => "//article[contains(@class, 'card')]/a/@href",
-        'base_url'   => 'https://muttville.org',
-        'type'       => 'muttville'
-    ]
-];
-
-// ============================================================
-// HELPERS & FORMATTERS
-// ============================================================
-function cleanName(string $raw): string { 
-    $cleaned = ucwords(strtolower(trim(preg_replace('/[*#@!]+/', '', $raw)))); 
-    // Kill Switch: Destroy dogs with fake names
-    if (empty($cleaned) || strtolower($cleaned) === 'null' || strtolower($cleaned) === 'unknown' || strtolower($cleaned) === 'no name') {
-        return '';
-    }
-    return $cleaned;
-}
-
-function normalizeGender(string $raw): string {
-    $r = strtolower(trim($raw));
-    if (str_contains($r, 'f') || str_contains($r, 'spayed')) return 'Female';
-    if (str_contains($r, 'm') || str_contains($r, 'neutered')) return 'Male';
-    return 'Unknown';
-}
-
-function breedSlug(string $raw): string {
-    $r = strtolower(trim($raw));
-    $r = preg_replace('/\s*\/.*$/', '', $r);
-    $r = preg_replace('/\s*(mix|mixed|breed|shorthair|longhair|medium hair)$/i', '', trim($r));
-    $map = ['german shepherd'=>'german-shepherd', 'golden retriever'=>'golden-retriever', 'labrador'=>'labrador-retriever', 'french bulldog'=>'french-bulldog', 'husky'=>'siberian-husky', 'poodle'=>'poodle', 'rottweiler'=>'rottweiler', 'dachshund'=>'dachshund', 'bulldog'=>'english-bulldog', 'australian shepherd'=>'australian-shepherd', 'chihuahua'=>'chihuahua', 'pit bull'=>'pit-bull', 'pug'=>'pug', 'beagle'=>'beagle', 'boxer'=>'boxer'];
-    foreach ($map as $k => $s) { if (str_contains($r, $k)) return $s; }
-    return strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($r, '-')));
-}
-
-// THE PREMIUM BIO SYNTHESIZER
-// Blends raw shelter data into a seamless, proprietary Foredog story
-function generateForedogBio($name, $breed, $age, $gender, $color, $rawShelterDesc): string {
-    $intros = [
-        "Meet $name, an exceptional match waiting to find their forever home.",
-        "We are thrilled to introduce you to $name, one of our featured rescue companions.",
-        "Looking for your perfect match? $name might just be the one you've been searching for."
-    ];
-    
-    $middles = [
-        "This beautiful $breed is currently $age, making them the perfect age to bond with a new family.",
-        "As a $age $gender $breed, $name has so much love and personality to share.",
-        "Don't let that sweet face fool you—this $gender is full of character and ready for their next adventure!"
-    ];
-
-    $foredogIntro = "<strong>" . $intros[array_rand($intros)] . " " . $middles[array_rand($middles)] . "</strong>";
-    
-    // Clean up the shelter description
-    $cleanShelterDesc = trim(strip_tags($rawShelterDesc));
-    
-    // Build the seamless narrative (No headers, no external links!)
-    $finalBio = $foredogIntro . "<br><br>";
-
-    if (!empty($cleanShelterDesc) && strlen($cleanShelterDesc) > 20) {
-        $finalBio .= $cleanShelterDesc . "<br><br>";
-    }
-
-    $outros = [
-        "If your lifestyle aligns with $name's needs, subscribe today to unlock their direct adoption details and schedule a meet-and-greet!",
-        "Ready to take the next step? Unlock $name's contact details and start your adoption journey today.",
-        "Don't let this perfect match slip away. Subscribe to access the shelter's information and bring $name home."
-    ];
-
-    $finalBio .= "<em>" . $outros[array_rand($outros)] . "</em>";
-
-    return $finalBio;
-}
-
-function getXPath($html) {
-    libxml_use_internal_errors(true);
-    $dom = new DOMDocument();
-    $dom->loadHTML($html);
-    libxml_clear_errors();
-    return new DOMXPath($dom);
-}
-
-// ============================================================
-// MULTI-CURL (CONCURRENT FETCHING)
-// ============================================================
-function fetchMultiplePages(array $urls): array {
-    $mh = curl_multi_init();
-    $ch_list = [];
-    $results = [];
-
-    foreach ($urls as $url) {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_TIMEOUT => 15, CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/122.0.0.0 Safari/537.36'
-        ]);
-        curl_multi_add_handle($mh, $ch);
-        $ch_list[$url] = $ch;
-    }
-
-    $active = null;
-    do { $mrc = curl_multi_exec($mh, $active); } while ($mrc == CURLM_CALL_MULTI_PERFORM);
-    while ($active && $mrc == CURLM_OK) {
-        if (curl_multi_select($mh) != -1) {
-            do { $mrc = curl_multi_exec($mh, $active); } while ($mrc == CURLM_CALL_MULTI_PERFORM);
-        }
-    }
-
-    foreach ($ch_list as $url => $ch) {
-        if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200) {
-            $results[$url] = curl_multi_getcontent($ch);
-        }
-        curl_multi_remove_handle($mh, $ch);
-    }
-    return $results;
-}
-
-// ============================================================
-// DEEP PARSERS
-// ============================================================
-function parsePasadena($xp, $url) {
-    $name = cleanName($xp->evaluate("string(//h1[contains(@class, 'product_title')])"));
-    $breed = $xp->evaluate("string(//td[strong[contains(text(), 'Looks Like')]]/following-sibling::td)") ?: 'Mixed Breed';
-    $age = $xp->evaluate("string(//td[strong[contains(text(), 'Age')]]/following-sibling::td)") ?: 'Adult';
-    $gender = $xp->evaluate("string(//td[strong[contains(text(), 'Gender')]]/following-sibling::td)") ?: 'Unknown';
-    $color = $xp->evaluate("string(//td[strong[contains(text(), 'Color')]]/following-sibling::td)") ?: 'Unknown';
-    $eid = $xp->evaluate("string(//td[strong[contains(text(), 'Animal ID')]]/following-sibling::td)") ?: md5($url);
-    $desc = trim($xp->evaluate("string(//div[@class='longdescription'])"));
-
-    $images = [];
-    foreach($xp->query("//ul[@id='image-gallery']//img/@src | //meta[@property='og:image']/@content") as $img) {
-        $src = $img->nodeValue;
-        if (str_contains($src, '.svg') || str_contains(strtolower($src), 'logo')) continue;
-        if (!in_array($src, $images)) $images[] = $src;
-    }
-    if (empty($name)) return null;
-    return ['eid'=>$eid, 'name'=>$name, 'breed'=>$breed, 'age'=>$age, 'gender'=>$gender, 'color'=>$color, 'desc'=>$desc, 'images'=>$images];
-}
-
-function parseWags($xp, $url) {
-    $jsonStr = $xp->evaluate("string(//div[contains(@class, 'product-detail')]/@data-context)");
-    $data = json_decode($jsonStr, true);
-    if (!$data || !isset($data['product'])) return null;
-    
-    $prod = $data['product'];
-    $name = cleanName($prod['title'] ?? '');
-    $eid = $prod['id'] ?? md5($url);
-    $rawDescHtml = $prod['description'] ?? '';
-    
-    preg_match('/Breed:\s*([^<]+)/i', strip_tags($rawDescHtml), $bMatch);
-    preg_match('/Age:\s*([^<]+)/i', strip_tags($rawDescHtml), $aMatch);
-    preg_match('/Gender:\s*([^<]+)/i', strip_tags($rawDescHtml), $gMatch);
-    
-    $images = [];
-    if (isset($prod['images'])) { 
-        foreach($prod['images'] as $img) { 
-            if (str_contains($img['assetUrl'], 'placeholder')) continue;
-            $images[] = $img['assetUrl']; 
-        } 
-    }
-    
-    if (empty($name)) return null;
-    return ['eid'=>$eid, 'name'=>$name, 'breed'=>trim($bMatch[1] ?? 'Mixed Breed'), 'age'=>trim($aMatch[1] ?? 'Adult'), 'gender'=>trim($gMatch[1] ?? 'Unknown'), 'color'=>'Unknown', 'desc'=>strip_tags($rawDescHtml), 'images'=>$images];
-}
-
-function parseMuttville($xp, $url) {
-    $name = cleanName($xp->evaluate("string(//meta[@property='og:title']/@content)"));
-    $eid = md5($url); 
-    
-    $infoBlock = $xp->evaluate("string(//p[contains(text(), 'Est. age')])");
-    $age = 'Senior'; 
-    if (preg_match('/Est\. age:\s*([^\n\r]+)/i', $infoBlock, $m)) {
-        $age = trim($m[1]);
-    }
-    
-    $ogDesc = $xp->evaluate("string(//meta[@property='og:description']/@content)");
-    $parts = explode('Status: Available.', $ogDesc, 2);
-    $metaParts = array_map('trim', explode('|', $parts[0] ?? ''));
-    $desc = trim($parts[1] ?? $ogDesc);
-    
-    $images = [];
-    foreach($xp->query("//div[contains(@class, 'slideshow-pics')]//img/@src") as $img) {
-        $src = $img->nodeValue;
-        if (!str_contains($src, '/mutts/')) continue;
-        
-        $src = str_replace('-med.jpg', '-lg.jpg', $src); 
-        if (!str_starts_with($src, 'http')) $src = 'https://muttville.org' . $src;
-        if (!in_array($src, $images)) $images[] = $src;
-    }
-    
-    if (empty($name)) return null;
-    return ['eid'=>$eid, 'name'=>$name, 'breed'=>$metaParts[0] ?? 'Mixed Breed', 'age'=>$age, 'gender'=>$metaParts[1] ?? 'Unknown', 'color'=>'Unknown', 'desc'=>$desc, 'images'=>$images];
-}
-
-// ============================================================
-// MAIN LOOP
-// ============================================================
 $totIns = 0; $totUpd = 0; $totErr = 0;
-echo "\n=== Foredog Deep Scraper [" . date('Y-m-d H:i:s') . "] ===\n\n";
+echo "\n=== California Scraper ===\n\n";
 
-foreach ($shelters as $shelter) {
-    echo "Scanning Index: {$shelter['name']}...\n";
-    $pages = fetchMultiplePages([$shelter['index_url']]);
-    $indexHtml = $pages[$shelter['index_url']] ?? null;
-    if (!$indexHtml) { echo "  [ERROR] Failed to load index.\n\n"; continue; }
+// =====================================================================
+// 1. PASADENA HUMANE (ShelterLuv API)
+// =====================================================================
+echo "Scanning: Pasadena Humane...\n";
 
+$apiUrl = 'https://www.shelterluv.com/api/v3/available-animals/100001324?species=Dog';
+$body = fetchUrl($apiUrl);
+
+$json = [];
+if (is_string($body) && !empty($body)) {
+    $decoded = json_decode($body, true);
+    if (is_array($decoded) && isset($decoded['animals'])) {
+        $json = $decoded['animals'];
+    }
+}
+
+$found = count($json);
+$s = $u = $e = 0;
+
+foreach ($json as $d) {
+    $rawName = $d['Name'] ?? $d['name'] ?? '';
+    $name = cleanName($rawName);
+    if (!$name) continue;
+
+    $breed = $d['Breed'] ?? $d['breed'] ?? 'Mixed Breed';
+    $rawAge = $d['Age'] ?? $d['age'] ?? 12;
+    $gender = normalizeGender($d['Sex'] ?? $d['sex'] ?? '');
+    $color = $d['Color'] ?? $d['color'] ?? 'Unknown';
+    $rawDesc = trim($d['Description'] ?? $d['description'] ?? '');
+    $dogId = $d['ID'] ?? $d['id'] ?? uniqid();
+    $profileLink = "https://pasadenahumane.org/adopt/view-pets/dogs/#sl_embed&page=shelterluv_wrap_1767068249%2Fembed%2Fanimal%2F{$dogId}";
+
+    $rawPhotos = $d['Photos'] ?? $d['photos'] ?? [];
+    $photoUrls = [];
+    foreach ($rawPhotos as $p) {
+        if (is_string($p)) { $photoUrls[] = $p; }
+        elseif (is_array($p) && isset($p['url'])) { $photoUrls[] = $p['url']; }
+    }
+
+    if (empty($photoUrls)) {
+        $cover = $d['CoverPhoto'] ?? $d['coverPhoto'] ?? '';
+        if ($cover) $photoUrls[] = (is_array($cover) ? $cover['url'] : $cover);
+    }
+    
+    $cleanImages = extractValidImages($photoUrls);
+    
+    // AGE MATH LOGIC CALLED HERE
+    $age = normalizeAge((string)$rawAge);
+    $desc = generateForedogBio($name, $breed, $age, $gender, $color, $rawDesc);
+
+    $res = upsertDog($db, [
+        'external_id'    => 'PH-' . $dogId,
+        'source_shelter' => 'Pasadena Humane',
+        'source_url'     => $profileLink,
+        'source_state'   => 'california',
+        'name'           => $name,
+        'breed_name'     => $breed,
+        'location'       => 'Pasadena, CA',
+        'city'           => 'Pasadena',
+        'state'          => 'CA',
+        'age'            => $age,
+        'gender'         => $gender,
+        'color'          => $color,
+        'description'    => $desc,
+        'image_url'      => $cleanImages[0] ?? '',
+        'gallery_urls'   => json_encode($cleanImages),
+        'owner_contact_name'  => 'Foredog Matchmaking',
+        'owner_contact_phone' => 'N/A',
+        'owner_contact_email' => 'hello@foredog.com',
+    ]);
+
+    if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
+}
+
+$db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Pasadena Humane' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
+printSummary('Pasadena Humane', $found, $s, $u, $e);
+$totIns += $s; $totUpd += $u;
+
+// =====================================================================
+// 2. WAGS AND WALKS
+// =====================================================================
+echo "Scanning: Wags and Walks...\n";
+$indexHtml = fetchUrl('https://www.wagsandwalks.org/adopt-la');
+if ($indexHtml) {
     $xp = getXPath($indexHtml);
     $links = [];
-    foreach($xp->query($shelter['link_xpath']) as $node) {
-        $link = $node->nodeValue;
-        if (!str_starts_with($link, 'http') && isset($shelter['base_url'])) {
-            $link = rtrim($shelter['base_url'], '/') . '/' . ltrim($link, '/');
-        }
-        if (!in_array($link, $links)) $links[] = $link;
+    foreach($xp->query("//a[contains(@class, 'summary-thumbnail-container')]/@href") as $node) {
+        $links[] = rtrim('https://www.wagsandwalks.org', '/') . '/' . ltrim($node->nodeValue, '/');
     }
 
-    $linksToFetch = array_slice($links, 0, 15);
-    echo "  Found " . count($links) . " profiles. Initiating concurrent fetch for " . count($linksToFetch) . " dogs...\n";
-    
-    $t0 = microtime(true);
+    $linksToFetch = array_slice(array_unique($links), 0, 15);
     $profilePages = fetchMultiplePages($linksToFetch);
-    $s = $u = 0;
+    $found = count($linksToFetch);
+    $s = $u = $e = 0;
 
-    foreach ($profilePages as $link => $profileHtml) {
-        $profileXp = getXPath($profileHtml);
-
-        if ($shelter['type'] === 'pasadena') $dog = parsePasadena($profileXp, $link);
-        elseif ($shelter['type'] === 'wags') $dog = parseWags($profileXp, $link);
-        elseif ($shelter['type'] === 'muttville') $dog = parseMuttville($profileXp, $link);
-
-        if (!$dog) continue;
-
-        $primaryImg = $dog['images'][0] ?? '';
-        $galleryJson = json_encode($dog['images']);
+    foreach ($profilePages as $link => $html) {
+        $xp = getXPath($html);
+        $jsonStr = $xp->evaluate("string(//div[contains(@class, 'product-detail')]/@data-context)");
+        $data = json_decode($jsonStr, true);
+        if (!$data || !isset($data['product'])) continue;
         
-        // Generate the Proprietary Foredog Bio
-        $finalDescription = generateForedogBio($dog['name'], $dog['breed'], $dog['age'], $dog['gender'], $dog['color'], $dog['desc']);
+        $prod = $data['product'];
+        $name = cleanName($prod['title'] ?? '');
+        if (!$name) continue;
 
-        $dogData = [
-            ':eid'    => $dog['eid'],
-            ':shelter'=> $shelter['name'],
-            ':surl'   => $link,
-            ':name'   => $dog['name'],
-            ':bslug'  => breedSlug($dog['breed']),
-            ':bname'  => ucwords(strtolower($dog['breed'])),
-            ':loc'    => $shelter['location'],
-            ':age'    => $dog['age'],
-            ':gender' => normalizeGender($dog['gender']),
-            ':color'  => $dog['color'],
-            ':desc'   => $finalDescription,
-            ':img'    => $primaryImg,
-            ':gallery'=> $galleryJson,
-            ':cname'  => $shelter['contact']['name'],
-            ':cphone' => $shelter['contact']['phone'],
-            ':cemail' => $shelter['contact']['email'],
-        ];
+        $rawDescHtml = $prod['description'] ?? '';
+        $plainText = strip_tags(str_ireplace(['<br>', '<br/>', '</p>', '</div>'], "\n", $rawDescHtml));
+        preg_match('/Breed:\s*([^\n]+)/i', $plainText, $bMatch);
+        preg_match('/Age:\s*([^\n]+)/i', $plainText, $aMatch);
+        preg_match('/Gender:\s*([^\n]+)/i', $plainText, $gMatch);
 
-        try {
-            $stmt = $db->prepare("INSERT INTO dogs
-                (external_id,source_shelter,source_url,name,breed_slug,breed_name,location,age,gender,color,description,image_url,gallery_urls,owner_contact_name,owner_contact_phone,owner_contact_email,status,last_seen_at)
-                VALUES(:eid,:shelter,:surl,:name,:bslug,:bname,:loc,:age,:gender,:color,:desc,:img,:gallery,:cname,:cphone,:cemail,'available',NOW())
-                ON DUPLICATE KEY UPDATE
-                name=VALUES(name), breed_name=VALUES(breed_name), breed_slug=VALUES(breed_slug), age=VALUES(age), description=VALUES(description), image_url=VALUES(image_url), gallery_urls=VALUES(gallery_urls), source_url=VALUES(source_url), status='available', last_seen_at=NOW()");
-            $stmt->execute($dogData);
-            
-            if ($stmt->rowCount() === 1) $s++;
-            elseif ($stmt->rowCount() === 2) $u++;
-        } catch(Exception $e) { $totErr++; }
+        $rawImages = array_column($prod['images'] ?? [], 'assetUrl');
+        $cleanImages = extractValidImages($rawImages); 
+
+        $age = normalizeAge(trim($aMatch[1] ?? ''));
+        $desc = generateForedogBio($name, trim($bMatch[1] ?? 'Mixed Breed'), $age, trim($gMatch[1] ?? 'Unknown'), 'Unknown', $plainText);
+
+        $res = upsertDog($db, [
+            'external_id'    => $prod['id'] ?? md5($link),
+            'source_shelter' => 'Wags and Walks',
+            'source_url'     => $link,
+            'source_state'   => 'california',
+            'name'           => $name,
+            'breed_name'     => trim($bMatch[1] ?? 'Mixed Breed'),
+            'location'       => 'Los Angeles, CA',
+            'city'           => 'Los Angeles',
+            'state'          => 'CA',
+            'age'            => $age,
+            'gender'         => trim($gMatch[1] ?? 'Unknown'),
+            'color'          => 'Unknown',
+            'description'    => $desc,
+            'image_url'      => $cleanImages[0] ?? '',
+            'gallery_urls'   => json_encode($cleanImages),
+            'owner_contact_name'  => 'Foredog Matchmaking',
+            'owner_contact_phone' => 'N/A',
+            'owner_contact_email' => 'hello@foredog.com',
+        ]);
+
+        if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
     }
     
-    $rm = $db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter=? AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)");
-    $rm->execute([$shelter['name']]);
-    
+    $db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Wags and Walks' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
+    printSummary('Wags and Walks', $found, $s, $u, $e);
     $totIns += $s; $totUpd += $u;
-    echo "  -> Added: $s | Updated: $u | Time: " . round(microtime(true)-$t0, 2) . "s\n\n";
 }
-echo "=== Scrape Complete ===\n";
+
+// =====================================================================
+// 3. MUTTVILLE SENIOR DOG RESCUE
+// =====================================================================
+echo "Scanning: Muttville...\n";
+$indexHtml = fetchUrl('https://muttville.org/available_mutts');
+if ($indexHtml) {
+    $xp = getXPath($indexHtml);
+    $links = [];
+    foreach($xp->query("//article[contains(@class, 'card')]/a/@href") as $node) {
+        $links[] = rtrim('https://muttville.org', '/') . '/' . ltrim($node->nodeValue, '/');
+    }
+
+    $linksToFetch = array_slice(array_unique($links), 0, 15);
+    $profilePages = fetchMultiplePages($linksToFetch);
+    $found = count($linksToFetch);
+    $s = $u = $e = 0;
+
+    foreach ($profilePages as $link => $html) {
+        $xp = getXPath($html);
+        $name = cleanName($xp->evaluate("string(//meta[@property='og:title']/@content)"));
+        if (!$name) continue;
+
+        $infoBlock = $xp->evaluate("string(//p[contains(text(), 'Est. age')])");
+        $rawAge = preg_match('/Est\. age:\s*([^\n\r]+)/i', $infoBlock, $m) ? trim($m[1]) : 'Senior';
+        
+        $ogDesc = $xp->evaluate("string(//meta[@property='og:description']/@content)");
+        $parts = explode('Status: Available.', $ogDesc, 2);
+        $metaParts = array_map('trim', explode('|', $parts[0] ?? ''));
+        
+        $rawImages = [];
+        foreach($xp->query("//div[contains(@class, 'slideshow-pics')]//img/@src") as $img) {
+            $rawImages[] = str_replace('-med.jpg', '-lg.jpg', $img->nodeValue);
+        }
+        
+        $cleanImages = extractValidImages($rawImages, 'https://muttville.org');
+
+        $age = normalizeAge($rawAge);
+        $desc = generateForedogBio($name, $metaParts[0] ?? 'Mixed Breed', $age, $metaParts[1] ?? 'Unknown', 'Unknown', trim($parts[1] ?? $ogDesc));
+
+        $res = upsertDog($db, [
+            'external_id'    => md5($link),
+            'source_shelter' => 'Muttville Senior Dog Rescue',
+            'source_url'     => $link,
+            'source_state'   => 'california',
+            'name'           => $name,
+            'breed_name'     => $metaParts[0] ?? 'Mixed Breed',
+            'location'       => 'San Francisco, CA',
+            'city'           => 'San Francisco',
+            'state'          => 'CA',
+            'age'            => $age,
+            'gender'         => $metaParts[1] ?? 'Unknown',
+            'color'          => 'Unknown',
+            'description'    => $desc,
+            'image_url'      => $cleanImages[0] ?? '',
+            'gallery_urls'   => json_encode($cleanImages),
+            'owner_contact_name'  => 'Foredog Matchmaking',
+            'owner_contact_phone' => 'N/A',
+            'owner_contact_email' => 'hello@foredog.com',
+        ]);
+
+        if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
+    }
+
+    $db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Muttville Senior Dog Rescue' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
+    printSummary('Muttville', $found, $s, $u, $e);
+    $totIns += $s; $totUpd += $u;
+}
+
+echo "\nCalifornia total — inserted: $totIns | updated: $totUpd\n";
