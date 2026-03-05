@@ -50,19 +50,14 @@ $dogs = $db->query('SELECT * FROM dogs WHERE status = "available" LIMIT 3')->fet
     .offer-center-img { width: 340px; height: 340px; border-radius: 50%; overflow: hidden; margin: 0 auto; box-shadow: var(--shadow-hover); border: 8px solid var(--surface); }
     .offer-center-img img { width: 100%; height: 100%; object-fit: cover; }
 
-    /* =========================================
-       FIXED: NATIVE CSS TIMELINE ANIMATION 
-       ========================================= */
+    /* TIMELINE */
     .how-it-works { padding: 8rem 0; text-align: center; background: var(--surface); position: relative; }
     .how-it-works h2 { font-family: 'DM Sans', sans-serif; font-size: 2.2rem; font-weight: 800; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 5rem; color: var(--text-dark); }
 
     .timeline-container { position: relative; max-width: 1000px; margin: 0 auto; padding-top: 1rem; }
-    
-    /* Mathematical alignment: Centers of dots are at 16.66% and 83.33%. Distance is exactly 66.66% */
     .timeline-track { position: absolute; top: 38px; left: 16.66%; width: 66.66%; height: 3px; background: var(--border); z-index: 1; }
     .timeline-progress { position: absolute; top: 38px; left: 16.66%; width: 0%; height: 3px; background: var(--pn-purple); z-index: 2; transition: width 1.5s cubic-bezier(0.4, 0, 0.2, 1); }
     
-    /* Hardware accelerated width trigger */
     .timeline-container.run-animation .timeline-progress { width: 66.66%; }
 
     .timeline-steps { display: flex; justify-content: space-between; position: relative; z-index: 3; }
@@ -74,7 +69,6 @@ $dogs = $db->query('SELECT * FROM dogs WHERE status = "available" LIMIT 3')->fet
     .step h3 { font-family: 'DM Sans', sans-serif; font-size: 1.4rem; font-weight: 700; margin-bottom: 1rem; color: var(--text-dark); }
     .step p { font-size: 0.95rem; color: var(--text-muted); line-height: 1.6; }
 
-    /* Sequential Step Animation Delays */
     .timeline-container.run-animation .step:nth-child(1) .dot { background: var(--pn-purple); box-shadow: 0 0 0 8px var(--pn-purple-light); opacity: 1; border-color: transparent; }
     .timeline-container.run-animation .step:nth-child(1) .step-content { opacity: 1; transform: translateY(0); }
 
@@ -84,7 +78,6 @@ $dogs = $db->query('SELECT * FROM dogs WHERE status = "available" LIMIT 3')->fet
     .timeline-container.run-animation .step:nth-child(3) .dot { transition-delay: 1.2s; background: var(--pn-purple); box-shadow: 0 0 0 8px var(--pn-purple-light); opacity: 1; border-color: transparent; }
     .timeline-container.run-animation .step:nth-child(3) .step-content { transition-delay: 1.2s; opacity: 1; transform: translateY(0); }
 
-    /* Mobile Vertical Timeline Fixes */
     @media (max-width: 768px) {
         .how-it-works { padding: 5rem 2rem; text-align: left; }
         .how-it-works h2 { text-align: center; margin-bottom: 3rem; }
@@ -107,16 +100,18 @@ $dogs = $db->query('SELECT * FROM dogs WHERE status = "available" LIMIT 3')->fet
     .dog-card { background: var(--surface); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow-soft); transition: all 0.3s ease; text-decoration: none; display: flex; flex-direction: column; border: 1px solid var(--border); }
     .dog-card:hover { transform: translateY(-8px); box-shadow: var(--shadow-hover); border-color: var(--pn-purple-light); }
     
-    .card-img-wrap { position: relative; height: 280px; padding: 1rem 1rem 0; background: var(--bg-alt); }
-    .card-img-wrap img { width: 100%; height: 100%; object-fit: cover; border-radius: 16px; transition: transform 0.6s ease; }
+    /* FIX: Bulletproof Square Grid Images (No Stretching!) */
+    .card-img-wrap { position: relative; width: 100%; padding-top: 100%; overflow: hidden; background: var(--border); }
+    .card-img-wrap img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover !important; display: block; transition: transform 0.5s ease; }
+    
     .dog-card:hover .card-img-wrap img { transform: scale(1.05); }
     
-    .badge-top { position: absolute; top: 1.75rem; left: 1.75rem; background: rgba(255,255,255,0.9); backdrop-filter: blur(4px); color: var(--text-dark); font-size: 0.7rem; font-weight: 700; padding: 0.3rem 0.8rem; border-radius: 50px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
-    .badge-gender { position: absolute; top: 1.75rem; right: 1.75rem; background: rgba(0,0,0,0.6); backdrop-filter: blur(4px); color: var(--surface); font-size: 0.7rem; font-weight: 700; padding: 0.3rem 0.8rem; border-radius: 50px; }
+    .badge-top { position: absolute; top: 1rem; left: 1rem; background: var(--surface); color: var(--pn-purple); font-size: 0.75rem; font-weight: 800; padding: 0.4rem 1rem; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 2; }
+    .badge-gender { position: absolute; top: 1rem; right: 1rem; background: var(--text-dark); color: var(--surface); font-size: 0.75rem; font-weight: 700; padding: 0.4rem 1rem; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 2; }
     
     .card-content { padding: 1.25rem 1.5rem; text-align: center; }
     .card-content h3 { font-family: 'Playfair Display', serif; font-size: 1.6rem; color: var(--text-dark); margin-bottom: 0.25rem; }
-    .card-breed { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0; }
+    .card-breed { color: var(--pn-purple); font-size: 0.95rem; font-weight: 700; margin-bottom: 1rem; }
 
     /* SUPPORT SECTION */
     .support-section { padding: 6rem 0; background: var(--bg-alt); }
@@ -300,4 +295,4 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 </script>
 
-<?php require __DIR__ . '/../templates/footer.php'; ?>
+<?php require __DIR__ . '/../templates/footer.php'; ?>׳

@@ -138,12 +138,14 @@ require __DIR__ . "/../templates/header.php";
     .dog-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; transition: all 0.3s ease; text-decoration: none; display: flex; flex-direction: column; }
     .dog-card:hover { transform: translateY(-8px); box-shadow: var(--shadow-hover); border-color: var(--pn-purple-light); }
     
-    .card-img-wrap { position: relative; height: 260px; overflow: hidden; background: var(--border); }
-    .card-img-wrap img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
+    /* FIX: Bulletproof Square Grid Images (No Stretching!) */
+    .card-img-wrap { position: relative; width: 100%; padding-top: 100%; overflow: hidden; background: var(--border); }
+    .card-img-wrap img { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover !important; display: block; transition: transform 0.5s ease; }
+    
     .dog-card:hover .card-img-wrap img { transform: scale(1.05); }
     
-    .badge-top { position: absolute; top: 1rem; left: 1rem; background: var(--surface); color: var(--pn-purple); font-size: 0.75rem; font-weight: 800; padding: 0.4rem 1rem; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
-    .badge-gender { position: absolute; top: 1rem; right: 1rem; background: var(--text-dark); color: var(--surface); font-size: 0.75rem; font-weight: 700; padding: 0.4rem 1rem; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+    .badge-top { position: absolute; top: 1rem; left: 1rem; background: var(--surface); color: var(--pn-purple); font-size: 0.75rem; font-weight: 800; padding: 0.4rem 1rem; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 2; }
+    .badge-gender { position: absolute; top: 1rem; right: 1rem; background: var(--text-dark); color: var(--surface); font-size: 0.75rem; font-weight: 700; padding: 0.4rem 1rem; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); z-index: 2; }
     
     .card-content { padding: 1.5rem; }
     .card-content h3 { font-family: "Playfair Display", serif; font-size: 1.6rem; margin-bottom: 0.25rem; color: var(--text-dark); }
@@ -201,8 +203,12 @@ require __DIR__ . "/../templates/header.php";
                     <h3><?= htmlspecialchars($dog['name']) ?></h3>
                     <div class="card-breed"><?= htmlspecialchars($dog['breed_name']) ?></div>
                     <div class="card-tags">
-                        <span class="tag"><?= htmlspecialchars($dog['age']) ?></span>
-                        <span class="tag"><?= htmlspecialchars($dog['color']) ?></span>
+                        <?php if (!empty($dog['age']) && strtolower($dog['age']) !== 'unknown'): ?>
+                            <span class="tag"><?= htmlspecialchars($dog['age']) ?></span>
+                        <?php endif; ?>
+                        <?php if (!empty($dog['color']) && strtolower($dog['color']) !== 'unknown'): ?>
+                            <span class="tag"><?= htmlspecialchars($dog['color']) ?></span>
+                        <?php endif; ?>
                     </div>
                     <div class="card-btn">
                         <span>Adopt <?= htmlspecialchars($dog["name"]) ?></span>
