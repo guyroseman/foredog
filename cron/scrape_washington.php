@@ -1,75 +1,195 @@
 <?php
 /**
- * Foredog — Washington Scraper (Premium Bio Edition)
+ * Foredog Scraper - Washington Master
+ * Scrapes Spokane Humane Society (ShelterLuv API) & Tacoma Humane (HTML Deep Scrape)
  */
 declare(strict_types=1);
 require_once __DIR__ . '/../src/Database.php';
-require_once __DIR__ . '/scraper_helpers.php';
+require_once __DIR__ . '/scraper_helpers.php'; 
 
 $db = Database::getInstance();
+$totIns = 0; $totUpd = 0; $totErr = 0;
+echo "\n=== Washington Scraper ===\n\n";
 
-$totalIns = $totalUpd = 0;
-echo "\n=== Washington Scraper ===\n";
-echo "\n[1/1] King County Regional Animal Services\n";
+// =====================================================================
+// 1. SPOKANE HUMANE SOCIETY (Dynamic ShelterLuv API)
+// =====================================================================
+echo "Scanning: Spokane Humane Society...\n";
 
-define('KINGCOUNTY_API_URL', ''); // ← paste API URL here when found
+$indexHtml = fetchUrl('https://spokanehumanesociety.org/adopt-dogs/');
+$gid = null;
 
-if (empty(KINGCOUNTY_API_URL)) {
-    echo "  [SKIP] King County API URL not configured yet. Skipping to prevent errors.\n";
-} else {
-    $body = fetchUrl(KINGCOUNTY_API_URL);
-    
-    // SAFE JSON PARSING
+if ($indexHtml && preg_match('/var\s+GID\s*=\s*(\d+)/i', $indexHtml, $m)) {
+    $gid = $m[1];
+}
+
+if (!$gid) {
+    $gid = '100001095'; // Known fallback ID for Spokane
+}
+
+if ($gid) {
+    $apiUrl = "https://www.shelterluv.com/api/v3/available-animals/$gid?species=Dog";
+    $body = fetchUrl($apiUrl);
+
     $json = [];
     if (is_string($body) && !empty($body)) {
         $decoded = json_decode($body, true);
-        if (is_array($decoded)) $json = $decoded;
+        if (is_array($decoded) && isset($decoded['animals'])) {
+            $json = $decoded['animals'];
+        }
     }
 
-    $animals = $json['animals'] ?? $json['data'] ?? $json['pets'] ?? $json;
+    $found = count($json);
+    $s = $u = $e = 0;
 
-    $found = $ins = $upd = $err = 0;
-    foreach ($animals as $d) {
-        if (!empty($d['type']) && strtolower($d['type']) !== 'dog') continue;
-        
-        $name = cleanName($d['name'] ?? '');
+    foreach ($json as $d) {
+        $rawName = $d['Name'] ?? $d['name'] ?? '';
+        $name = cleanName($rawName);
         if (!$name) continue;
 
-        $breed = $d['breed'] ?? ($d['breeds']['primary'] ?? 'Mixed Breed');
-        $age = $d['age'] ?? 'Adult';
-        $gender = normalizeGender($d['gender'] ?? $d['sex'] ?? '');
-        $color = $d['color'] ?? 'Unknown';
+        $breed = $d['Breed'] ?? $d['breed'] ?? 'Mixed Breed';
+        $rawAge = $d['Age'] ?? $d['age'] ?? 12; // Shelterluv returns age in MONTHS
+        $gender = normalizeGender($d['Sex'] ?? $d['sex'] ?? '');
+        $color = $d['Color'] ?? $d['color'] ?? 'Unknown';
+        $rawDesc = trim($d['Description'] ?? $d['description'] ?? '');
+        $dogId = $d['ID'] ?? $d['id'] ?? uniqid();
+        $profileLink = "https://spokanehumanesociety.org/adopt-dogs/#sl_embed&page=shelterluv_wrap_1601305436322%2Fembed%2Fanimal%2F{$dogId}";
+
+        $rawPhotos = $d['Photos'] ?? $d['photos'] ?? [];
+        $photoUrls = [];
+        foreach ($rawPhotos as $p) {
+            if (is_string($p)) { $photoUrls[] = $p; }
+            elseif (is_array($p) && isset($p['url'])) { $photoUrls[] = $p['url']; }
+        }
+
+        if (empty($photoUrls)) {
+            $cover = $d['CoverPhoto'] ?? $d['coverPhoto'] ?? '';
+            if ($cover) $photoUrls[] = (is_array($cover) ? $cover['url'] : $cover);
+        }
         
-        // Generate Premium Foredog Bio
-        $rawDesc = trim($d['description'] ?? '');
+        $cleanImages = extractValidImages($photoUrls);
+        $age = normalizeAge((string)$rawAge);
         $desc = generateForedogBio($name, $breed, $age, $gender, $color, $rawDesc);
 
-        $found++;
-        $r = upsertDog($db, [
-            'external_id'         => 'KC-' . ($d['id'] ?? $d['animal_id'] ?? uniqid()),
-            'name'                => $name,
-            'breed_name'          => $breed,
-            'age'                 => $age,
-            'gender'              => $gender,
-            'color'               => $color,
-            'description'         => $desc,
-            'image_url'           => $d['photo'] ?? ($d['photos'][0]['full'] ?? ''),
-            'gallery_urls'        => json_encode([]),
-            'location'            => 'King County, WA',
-            'city'                => 'Seattle',
-            'state'               => 'WA',
-            'source_state'        => 'washington',
-            'source_shelter'      => 'King County Regional Animal Services',
-            'source_url'          => 'https://kingcounty.gov/en/dept/regional-animal-services',
-            'owner_contact_name'  => 'King County Animal Services',
-            'owner_contact_phone' => '(206) 296-7387',
-            'owner_contact_email' => 'ras@kingcounty.gov',
+        $res = upsertDog($db, [
+            'external_id'    => 'WA-SHS-' . $dogId,
+            'source_shelter' => 'Spokane Humane Society',
+            'source_url'     => $profileLink,
+            'source_state'   => 'washington',
+            'name'           => $name,
+            'breed_name'     => $breed,
+            'location'       => 'Spokane, WA',
+            'city'           => 'Spokane',
+            'state'          => 'WA',
+            'age'            => $age,
+            'gender'         => $gender,
+            'color'          => $color,
+            'description'    => $desc,
+            'image_url'      => $cleanImages[0] ?? '',
+            'gallery_urls'   => json_encode($cleanImages),
+            'owner_contact_name'  => 'Foredog Matchmaking',
+            'owner_contact_phone' => 'N/A',
+            'owner_contact_email' => 'hello@foredog.com',
         ]);
-        if ($r === 'inserted') { $ins++; $totalIns++; }
-        elseif ($r === 'updated') { $upd++; $totalUpd++; }
-        else $err++;
+
+        if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
     }
-    printSummary('King County Regional Animal Services', $found, $ins, $upd, $err);
+
+    $db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Spokane Humane Society' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
+    
+    printSummary('Spokane Humane', $found, $s, $u, $e);
+    $totIns += $s; $totUpd += $u;
 }
 
-echo "\nWashington total — inserted: $totalIns | updated: $totalUpd\n";
+// =====================================================================
+// 2. THE HUMANE SOCIETY FOR TACOMA & PIERCE COUNTY
+// =====================================================================
+echo "Scanning: Tacoma Humane...\n";
+
+$indexUrl = 'https://www.thehumanesociety.org/adoptable-pet-category/dogs/';
+$indexHtml = fetchUrl($indexUrl);
+
+$links = [];
+if ($indexHtml) {
+    $xp = getXPath($indexHtml);
+    foreach($xp->query("//a[contains(@class, 'pet-card')]/@href") as $node) {
+        $link = trim($node->nodeValue);
+        if (!str_starts_with($link, 'http')) {
+            $link = 'https://www.thehumanesociety.org' . $link;
+        }
+        if (!in_array($link, $links)) {
+            $links[] = $link;
+        }
+    }
+}
+
+$linksToFetch = array_slice($links, 0, 15);
+$profilePages = fetchMultiplePages($linksToFetch);
+$found = count($linksToFetch);
+$s = $u = $e = 0;
+
+foreach ($profilePages as $link => $html) {
+    $xp = getXPath($html);
+    
+    $name = cleanName($xp->evaluate("string(//h1[contains(@class, 'headline')])"));
+    if (!$name) continue;
+
+    $petIdRaw = $xp->evaluate("string(//p[strong[contains(text(), 'PET ID')]])");
+    preg_match('/PET ID:\s*(\d+)/i', $petIdRaw, $idMatch);
+    $petId = $idMatch[1] ?? md5($link);
+
+    $rawBreed = $xp->evaluate("normalize-space(//p[strong[contains(text(), 'Breed')]])");
+    $rawBreed = str_replace('Breed:', '', $rawBreed);
+    
+    $rawGender = $xp->evaluate("normalize-space(//p[strong[contains(text(), 'Sex')]])");
+    $rawGender = str_replace('Sex:', '', $rawGender);
+
+    $rawAge = $xp->evaluate("normalize-space(//p[strong[contains(text(), 'Age')]])");
+    $rawAge = str_replace('Age:', '', $rawAge);
+
+    $rawDesc = trim($xp->evaluate("string(//div[contains(@class, 'rtecontent')])"));
+    
+    $rawImages = [];
+    foreach($xp->query("//div[contains(@class, 'pet-details-image')]//img/@src") as $img) {
+        $rawImages[] = $img->nodeValue;
+    }
+    
+    $cleanImages = extractValidImages($rawImages);
+    $primaryImage = $cleanImages[0] ?? '';
+
+    $age = normalizeAge(trim($rawAge));
+    $gender = normalizeGender(trim($rawGender));
+    $breed = trim($rawBreed) ?: 'Mixed Breed';
+    
+    $desc = generateForedogBio($name, $breed, $age, $gender, 'Unknown', $rawDesc);
+
+    $res = upsertDog($db, [
+        'external_id'    => 'WA-THS-' . $petId,
+        'source_shelter' => 'Tacoma Humane',
+        'source_url'     => $link,
+        'source_state'   => 'washington',
+        'name'           => $name,
+        'breed_name'     => $breed,
+        'location'       => 'Tacoma, WA',
+        'city'           => 'Tacoma',
+        'state'          => 'WA',
+        'age'            => $age,
+        'gender'         => $gender,
+        'color'          => 'Unknown',
+        'description'    => $desc,
+        'image_url'      => $primaryImage,
+        'gallery_urls'   => json_encode($cleanImages),
+        'owner_contact_name'  => 'Foredog Matchmaking',
+        'owner_contact_phone' => '(253) 383-2733',
+        'owner_contact_email' => 'hello@foredog.com',
+    ]);
+
+    if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
+}
+
+$db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Tacoma Humane' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
+
+printSummary('Tacoma Humane', $found, $s, $u, $e);
+$totIns += $s; $totUpd += $u;
+
+echo "\nWashington total — inserted: $totIns | updated: $totUpd\n";

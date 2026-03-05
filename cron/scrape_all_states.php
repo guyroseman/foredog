@@ -14,8 +14,8 @@ $scrapers = [
     'California' => __DIR__ . '/scrape_california.php',
     'Texas'      => __DIR__ . '/scrape_texas.php',
     'New York'   => __DIR__ . '/scrape_newyork.php',
-    //'Washington' => __DIR__ . '/scrape_washington.php',
-    //'Florida'    => __DIR__ . '/scrape_florida.php',
+    'Washington' => __DIR__ . '/scrape_washington.php',
+    'Florida'    => __DIR__ . '/scrape_florida.php',
     //'Illinois'   => __DIR__ . '/scrape_illinois.php',
 ];
 

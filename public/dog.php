@@ -60,7 +60,7 @@ require __DIR__ . '/../templates/header.php';
 
     body { font-family: 'Inter', sans-serif; background: #FAFAFA; color: var(--text-main); }
     
-    .profile-container { max-width: 1200px; margin: 0 auto; padding: 60px 2rem 6rem; }
+    .profile-container { max-width: 1200px; margin: 0 auto; padding: 150px 2rem 6rem; }
     
     .breadcrumbs { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 2rem; font-weight: 500; }
     .breadcrumbs a { color: var(--text-sub); text-decoration: none; transition: color 0.2s; }
@@ -92,11 +92,11 @@ require __DIR__ . '/../templates/header.php';
         border-radius: 16px; 
         padding: 2.5rem; 
         box-shadow: 0 10px 40px rgba(0,0,0,0.03); 
-        max-height: calc(100vh - 120px); /* Keeps the card from exceeding monitor height */
-        overflow-y: auto; /* Allows scrolling inside the card if needed */
-        scrollbar-width: none; /* Firefox */
+        max-height: calc(100vh - 120px); 
+        overflow-y: auto; 
+        scrollbar-width: none; 
     }
-    .sticky-card::-webkit-scrollbar { display: none; /* Safari/Chrome */ }
+    .sticky-card::-webkit-scrollbar { display: none; }
     
     .badge-top { display: inline-block; background: var(--fd-purple-light); color: var(--fd-purple); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 0.4rem 1rem; border-radius: 50px; margin-bottom: 1rem; width: fit-content; }
     
@@ -106,8 +106,10 @@ require __DIR__ . '/../templates/header.php';
     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; padding-bottom: 2rem; border-bottom: 1px solid var(--border-color); }
     .stat-box { display: flex; flex-direction: column; gap: 0.4rem; }
     .stat-box span { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-sub); font-weight: 600; }
-    .stat-box strong { font-size: 1rem; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 6px; }
-    .stat-box svg { color: var(--fd-purple); width: 18px; height: 18px; }
+    .stat-box strong { font-size: 1.05rem; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    
+    /* FIX: Standardized SVG sizing without forcing generic colors */
+    .stat-box svg { width: 20px; height: 20px; flex-shrink: 0; }
 
     .apply-btn { width: 100%; background: var(--fd-purple); color: #FFF; border: none; padding: 1.2rem; border-radius: 50px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif; box-shadow: 0 4px 15px rgba(123, 82, 244, 0.3); margin-bottom: 1.5rem; }
     .apply-btn:hover { background: var(--fd-purple-hover); transform: translateY(-2px); }
@@ -189,21 +191,32 @@ require __DIR__ . '/../templates/header.php';
                 <div class="stat-box">
                     <span>Age</span>
                     <strong>
-                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                        <svg viewBox="0 0 24 24" stroke="var(--fd-purple)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                         <?= $safeAge ?>
                     </strong>
                 </div>
                 <div class="stat-box">
                     <span>Gender</span>
                     <strong>
-                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><path d="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16z"></path><line x1="12" y1="14" x2="12" y2="21"></line><line x1="9" y1="18" x2="15" y2="18"></line></svg>
+                        <?php 
+                        $gLower = strtolower($safeGender);
+                        if ($gLower === 'female') {
+                            // Authentic Venus symbol in Magenta/Pink
+                            echo '<svg viewBox="0 0 24 24" stroke="#D81B60" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="6"></circle><line x1="12" y1="16" x2="12" y2="22"></line><line x1="9" y1="19" x2="15" y2="19"></line></svg>';
+                        } elseif ($gLower === 'male') {
+                            // Authentic Mars symbol in Vibrant Blue
+                            echo '<svg viewBox="0 0 24 24" stroke="#1E88E5" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="14" r="6"></circle><line x1="14.2" y1="9.8" x2="21" y2="3"></line><polyline points="14 3 21 3 21 10"></polyline></svg>';
+                        } else {
+                            echo '<svg viewBox="0 0 24 24" stroke="var(--fd-purple)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>';
+                        }
+                        ?>
                         <?= $safeGender ?>
                     </strong>
                 </div>
                 <div class="stat-box" style="grid-column: span 2;">
                     <span>Location</span>
                     <strong>
-                        <svg viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" fill="none"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                        <svg viewBox="0 0 24 24" stroke="var(--fd-purple)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
                         <?= $safeLocation ?>
                     </strong>
                 </div>
