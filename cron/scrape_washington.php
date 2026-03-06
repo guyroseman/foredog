@@ -87,9 +87,9 @@ if ($gid) {
             'description'    => $desc,
             'image_url'      => $cleanImages[0] ?? '',
             'gallery_urls'   => json_encode($cleanImages),
-            'owner_contact_name'  => 'Foredog Matchmaking',
-            'owner_contact_phone' => 'N/A',
-            'owner_contact_email' => 'hello@foredog.com',
+            'owner_contact_name'  => 'Spokane Humane Society',
+            'owner_contact_phone' => '(509) 467-5235',
+            'owner_contact_email' => 'adoptions@spokanehumanesociety.org',
         ]);
 
         if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
@@ -179,9 +179,9 @@ foreach ($profilePages as $link => $html) {
         'description'    => $desc,
         'image_url'      => $primaryImage,
         'gallery_urls'   => json_encode($cleanImages),
-        'owner_contact_name'  => 'Foredog Matchmaking',
+        'owner_contact_name'  => 'Humane Society for Tacoma & Pierce County',
         'owner_contact_phone' => '(253) 383-2733',
-        'owner_contact_email' => 'hello@foredog.com',
+        'owner_contact_email' => 'adopt@thehumanesociety.org',
     ]);
 
     if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;

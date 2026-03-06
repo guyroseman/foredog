@@ -60,26 +60,51 @@ require __DIR__ . '/../templates/header.php';
 
     body { font-family: 'Inter', sans-serif; background: #FAFAFA; color: var(--text-main); }
     
-    .profile-container { max-width: 1200px; margin: 0 auto; padding: 150px 2rem 6rem; }
+    /* Tightened top padding to reduce the gap below the header */
+    .profile-container { max-width: 1100px; margin: 0 auto; padding: 1.5rem 1.5rem 6rem; }
     
-    .breadcrumbs { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 2rem; font-weight: 500; }
+    .breadcrumbs { font-size: 0.85rem; color: var(--text-sub); margin-bottom: 1.5rem; font-weight: 500; }
     .breadcrumbs a { color: var(--text-sub); text-decoration: none; transition: color 0.2s; }
     .breadcrumbs a:hover { color: var(--fd-purple); }
 
-    .grid-layout { display: grid; grid-template-columns: 1.4fr 1fr; gap: 4rem; align-items: start; }
+    /* Locked the right column to a max of 380px so the left column takes a stable width */
+    .grid-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(320px, 380px); gap: 3.5rem; align-items: start; }
     @media(max-width: 992px){ .grid-layout { grid-template-columns: 1fr; gap: 2rem; } }
 
     /* LEFT SIDE - GALLERY */
-    .gallery-wrapper { width: 100%; display: flex; flex-direction: column; gap: 1rem; }
-    .main-img-box { width: 100%; aspect-ratio: 4/3; border-radius: 16px; overflow: hidden; background: #EEE; }
-    .main-img-box img { width: 100%; height: 100%; object-fit: cover; }
+    .gallery-wrapper { width: 100%; display: flex; flex-direction: column; gap: 0.75rem; }
+    
+    /* * BULLETPROOF IMAGE CONTAINER:
+     * Using padding-top creates a strict, unchangeable ratio (70% = nice cinematic rectangle).
+     * This stops tall images from ever pushing the page down.
+     */
+    .main-img-box { 
+        position: relative; 
+        width: 100%; 
+        padding-top: 70%; 
+        border-radius: 16px; 
+        overflow: hidden; 
+        background: #EAEAEA; 
+    }
+    
+    /* The image fills the box absolutely and crops smartly */
+    .main-img-box img { 
+        position: absolute; 
+        top: 0; 
+        left: 0; 
+        width: 100%; 
+        height: 100%; 
+        object-fit: cover; 
+        object-position: center 20%; /* Prioritizes the dog's face */
+        display: block; 
+    }
     
     .thumb-track { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; scrollbar-width: none; }
     .thumb-track::-webkit-scrollbar { display: none; }
-    .thumb-track img { width: 80px; height: 80px; border-radius: 12px; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; opacity: 0.6; }
+    .thumb-track img { width: 80px; height: 80px; border-radius: 12px; object-fit: cover; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; opacity: 0.6; flex-shrink: 0; }
     .thumb-track img.active, .thumb-track img:hover { opacity: 1; border-color: var(--fd-purple); }
 
-    .bio-block { margin-top: 3rem; }
+    .bio-block { margin-top: 2.5rem; }
     .bio-block h2 { font-family: 'Playfair Display', serif; font-size: 2.2rem; color: var(--text-main); margin-bottom: 1.5rem; }
     .bio-block p { color: var(--text-sub); font-size: 1.05rem; line-height: 1.8; margin-bottom: 1.5rem; }
 
@@ -108,7 +133,6 @@ require __DIR__ . '/../templates/header.php';
     .stat-box span { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-sub); font-weight: 600; }
     .stat-box strong { font-size: 1.05rem; color: var(--text-main); font-weight: 700; display: flex; align-items: center; gap: 8px; }
     
-    /* FIX: Standardized SVG sizing without forcing generic colors */
     .stat-box svg { width: 20px; height: 20px; flex-shrink: 0; }
 
     .apply-btn { width: 100%; background: var(--fd-purple); color: #FFF; border: none; padding: 1.2rem; border-radius: 50px; font-size: 1.1rem; font-weight: 600; cursor: pointer; transition: all 0.2s; font-family: 'Inter', sans-serif; box-shadow: 0 4px 15px rgba(123, 82, 244, 0.3); margin-bottom: 1.5rem; }
@@ -201,10 +225,8 @@ require __DIR__ . '/../templates/header.php';
                         <?php 
                         $gLower = strtolower($safeGender);
                         if ($gLower === 'female') {
-                            // Authentic Venus symbol in Magenta/Pink
                             echo '<svg viewBox="0 0 24 24" stroke="#D81B60" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="10" r="6"></circle><line x1="12" y1="16" x2="12" y2="22"></line><line x1="9" y1="19" x2="15" y2="19"></line></svg>';
                         } elseif ($gLower === 'male') {
-                            // Authentic Mars symbol in Vibrant Blue
                             echo '<svg viewBox="0 0 24 24" stroke="#1E88E5" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="14" r="6"></circle><line x1="14.2" y1="9.8" x2="21" y2="3"></line><polyline points="14 3 21 3 21 10"></polyline></svg>';
                         } else {
                             echo '<svg viewBox="0 0 24 24" stroke="var(--fd-purple)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>';

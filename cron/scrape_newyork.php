@@ -18,13 +18,14 @@ $indexHtml = fetchUrl($indexUrl);
 $links = [];
 if ($indexHtml) {
     $xp = getXPath($indexHtml);
-    // FIX: Target only pet profile links
-    foreach($xp->query("//a[contains(@class, 'pet-preview__link')]/@href") as $node) {
+    // Target pet profile links (broadened to catch them if class names changed)
+    foreach($xp->query("//a[contains(@class, 'pet-preview__link')]/@href | //a[contains(@href, '/adopt/dogs/')]/@href") as $node) {
         $link = trim($node->nodeValue);
         if (!str_starts_with($link, 'http')) {
             $link = 'https://animalhaven.org' . $link;
         }
-        if (!in_array($link, $links)) {
+        // Avoid indexing the main page itself
+        if ($link !== 'https://animalhaven.org/adopt/dogs' && !in_array($link, $links)) {
             $links[] = $link;
         }
     }
@@ -41,15 +42,21 @@ foreach ($profilePages as $link => $html) {
     $name = cleanName($xp->evaluate("string(//h1[contains(@class, 'pet-profile__name')] | //h1)"));
     if (!$name) continue;
 
-    // FIX: Grab exactly the list items for Breed and Age to guarantee 100% accuracy
-    $rawGender = $xp->evaluate("normalize-space(//li[contains(@class, 'pet-profile__subtitle-item--gender')]//span)");
+    $rawGender = $xp->evaluate("normalize-space(//li[contains(@class, 'pet-profile__subtitle-item--gender')]//span | //span[contains(text(), 'Male') or contains(text(), 'Female')])");
     $rawBreed = $xp->evaluate("normalize-space((//li[contains(@class, 'pet-profile__subtitle-item')])[2])");
     $rawAge = $xp->evaluate("normalize-space((//li[contains(@class, 'pet-profile__subtitle-item')])[3])");
-    $rawDesc = trim($xp->evaluate("string(//div[contains(@class, 'pet-profile__description-text')])"));
     
-    // FIX: Only grab the primary gallery image of the dog. Prevents mixing multiple dogs!
+    // Fallback if their list structure changed
+    if (!$rawBreed && !$rawAge) {
+        $rawBreed = 'Mixed Breed';
+        $rawAge = 'Adult';
+    }
+
+    $rawDesc = trim($xp->evaluate("string(//div[contains(@class, 'pet-profile__description-text')] | //div[contains(@class, 'content')])"));
+    
+    // Broadened image search to guarantee we grab a photo even if they changed the layout
     $rawImages = [];
-    foreach($xp->query("//img[contains(@class, 'pet-gallery__image')]/@src | //img[contains(@class, 'pet-gallery__thumbnail-image')]/@src") as $img) {
+    foreach($xp->query("//img[contains(@class, 'pet-gallery__image')]/@src | //img[contains(@class, 'pet-gallery__thumbnail-image')]/@src | //main//img/@src") as $img) {
         $src = trim($img->nodeValue);
         if (!preg_match('/(placeholder)/i', $src)) {
             $rawImages[] = $src;
@@ -57,9 +64,10 @@ foreach ($profilePages as $link => $html) {
     }
     
     $cleanImages = extractValidImages($rawImages, 'https://animalhaven.org');
-    if (empty($cleanImages)) continue;
-
-    // We pass the exact explicit age here, no paragraph reading!
+    
+    // DELIBERATELY REMOVED: if (empty($cleanImages)) continue;
+    // We want the dog in the database even if the shelter site fails to load the image!
+    
     $age = normalizeAge($rawAge);
     $gender = normalizeGender($rawGender);
     $breed = $rawBreed ?: 'Mixed Breed';
@@ -68,7 +76,7 @@ foreach ($profilePages as $link => $html) {
 
     $res = upsertDog($db, [
         'external_id'    => md5($link),
-        'source_shelter' => 'Animal Haven',
+        'source_shelter' => 'Animal Haven NYC',
         'source_url'     => $link,
         'source_state'   => 'newyork',
         'name'           => $name,
@@ -82,16 +90,18 @@ foreach ($profilePages as $link => $html) {
         'description'    => $desc,
         'image_url'      => $cleanImages[0] ?? '',
         'gallery_urls'   => json_encode($cleanImages),
-        'owner_contact_name'  => 'Foredog Matchmaking',
-        'owner_contact_phone' => 'N/A',
-        'owner_contact_email' => 'hello@foredog.com',
+        // HARDCODED VERIFIED CONTACT DETAILS:
+        'owner_contact_name'  => 'Animal Haven NYC',
+        'owner_contact_phone' => '(212) 274-8511',
+        'owner_contact_email' => 'dogsandcats@ah-nyc.org',
     ]);
 
     if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
 }
 
-$db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Animal Haven' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
+$db->prepare("UPDATE dogs SET status='adopted', adopted_at=NOW() WHERE source_shelter='Animal Haven NYC' AND status='available' AND last_seen_at < DATE_SUB(NOW(),INTERVAL 48 HOUR)")->execute();
 printSummary('Animal Haven NYC', $found, $s, $u, $e);
 $totIns += $s; $totUpd += $u;
 
 echo "\nNew York total — inserted: $totIns | updated: $totUpd\n";
+?>

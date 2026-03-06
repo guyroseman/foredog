@@ -76,9 +76,9 @@ if ($indexHtml) {
             'description'    => $desc,
             'image_url'      => $cleanImages[0] ?? '',
             'gallery_urls'   => json_encode($cleanImages),
-            'owner_contact_name'  => 'Foredog Matchmaking',
-            'owner_contact_phone' => 'N/A',
-            'owner_contact_email' => 'hello@foredog.com',
+            'owner_contact_name'  => 'Austin Pets Alive!',
+            'owner_contact_phone' => '(512) 961-6519',
+            'owner_contact_email' => 'adopt@austinpetsalive.org',
         ]);
 
         if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
@@ -154,9 +154,9 @@ foreach ($json as $d) {
         'description'    => $desc,
         'image_url'      => $cleanImages[0] ?? '',
         'gallery_urls'   => json_encode($cleanImages),
-        'owner_contact_name'  => 'Foredog Matchmaking',
-        'owner_contact_phone' => 'N/A',
-        'owner_contact_email' => 'hello@foredog.com',
+        'owner_contact_name'  => 'Texas Humane Heroes',
+        'owner_contact_phone' => '(512) 260-3602',
+        'owner_contact_email' => 'info@txhh.org',
     ]);
 
     if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;

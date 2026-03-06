@@ -1,6 +1,6 @@
 <?php
 /**
- * Foredog - Master Scraper Helpers (Advanced Bio Cleaner & Age Formatting)
+ * Foredog - Master Scraper Helpers (Advanced Bio Cleaner & Breed Normalizer)
  */
 declare(strict_types=1);
 
@@ -145,14 +145,82 @@ if (!function_exists('normalizeAge')) {
     }
 }
 
-if (!function_exists('breedSlug')) {
-    function breedSlug(string $raw): string {
+// === PREMIUM MASTER BREED NORMALIZER ===
+if (!function_exists('normalizeForedogBreed')) {
+    function normalizeForedogBreed(string $raw): array {
         $r = strtolower(trim($raw));
-        $r = preg_replace('/\s*\/.*$/', '', $r);
-        $r = preg_replace('/\s*(mix|mixed|breed|shorthair|longhair|medium hair)$/i', '', trim($r));
-        $map = ['german shepherd'=>'german-shepherd', 'golden retriever'=>'golden-retriever', 'labrador'=>'labrador-retriever', 'french bulldog'=>'french-bulldog', 'husky'=>'siberian-husky', 'poodle'=>'poodle', 'rottweiler'=>'rottweiler', 'dachshund'=>'dachshund', 'bulldog'=>'english-bulldog', 'australian shepherd'=>'australian-shepherd', 'chihuahua'=>'chihuahua', 'pit bull'=>'pit-bull', 'pug'=>'pug', 'beagle'=>'beagle', 'boxer'=>'boxer'];
-        foreach ($map as $k => $s) { if (str_contains($r, $k)) return $s; }
-        return strtolower(preg_replace('/[^a-z0-9]+/', '-', trim($r, '-')));
+        
+        // 1. Strip parenthetical sizes e.g. "Mixed Breed (large)" -> "Mixed Breed"
+        $r = preg_replace('/\(.*?\)/', '', $r);
+        
+        // 2. Fix comma inversions e.g. "Retriever, Labrador" -> "Labrador Retriever"
+        if (preg_match('/^([^,]+),\s*([^,]+)$/', $r, $matches)) {
+            $r = trim($matches[2]) . ' ' . trim($matches[1]);
+        }
+        
+        // 3. Grab the dominant breed for mixes (e.g., "Husky / Poodle" -> "Husky")
+        $parts = preg_split('/[\/&]/', $r);
+        $r = trim($parts[0]);
+
+        // 4. Ultimate Dictionary Consolidation
+        $map = [
+            'labrador' => ['Labrador Retriever', 'labrador-retriever'],
+            'golden' => ['Golden Retriever', 'golden-retriever'],
+            'german shepherd' => ['German Shepherd', 'german-shepherd'],
+            'french bulldog' => ['French Bulldog', 'french-bulldog'],
+            'frenchie' => ['French Bulldog', 'french-bulldog'],
+            'siberian husky' => ['Siberian Husky', 'siberian-husky'],
+            'husky' => ['Siberian Husky', 'siberian-husky'],
+            'poodle' => ['Poodle', 'poodle'], // Catches toy, miniature, standard
+            'rottweiler' => ['Rottweiler', 'rottweiler'],
+            'dachshund' => ['Dachshund', 'dachshund'],
+            'corgi' => ['Corgi', 'corgi'],
+            'australian shepherd' => ['Australian Shepherd', 'australian-shepherd'],
+            'yorkshire' => ['Yorkshire Terrier', 'yorkshire-terrier'],
+            'yorkie' => ['Yorkshire Terrier', 'yorkshire-terrier'],
+            'cavalier' => ['Cavalier King Charles', 'cavalier-spaniel'],
+            'doberman' => ['Doberman Pinscher', 'doberman'],
+            'boxer' => ['Boxer', 'boxer'],
+            'schnauzer' => ['Schnauzer', 'schnauzer'],
+            'shih tzu' => ['Shih Tzu', 'shih-tzu'],
+            'pug' => ['Pug', 'pug'],
+            'border collie' => ['Border Collie', 'border-collie'],
+            'english bulldog' => ['Bulldog', 'bulldog'],
+            'bulldog' => ['Bulldog', 'bulldog'],
+            'pit bull' => ['Pit Bull', 'pit-bull'],
+            'staffordshire' => ['Pit Bull', 'pit-bull'],
+            'chihuahua' => ['Chihuahua', 'chihuahua'],
+            'great dane' => ['Great Dane', 'great-dane'],
+            'mastiff' => ['Mastiff', 'mastiff'],
+            'shiba' => ['Shiba Inu', 'shiba-inu'],
+            'beagle' => ['Beagle', 'beagle'],
+            'maltese' => ['Maltese', 'maltese'],
+            'pointer' => ['Pointer', 'pointer'],
+            'dalmatian' => ['Dalmatian', 'dalmatian'],
+            'weimaraner' => ['Weimaraner', 'weimaraner'],
+            'sheepdog' => ['Sheepdog', 'sheepdog'],
+            'hound' => ['Hound', 'hound'],
+            'shepherd' => ['Shepherd', 'shepherd'],
+            'terrier' => ['Terrier', 'terrier'],
+            'retriever' => ['Retriever', 'retriever'],
+            'mixed' => ['Mixed Breed', 'mixed-breed'],
+            'mix' => ['Mixed Breed', 'mixed-breed']
+        ];
+
+        // Search the dictionary
+        foreach ($map as $keyword => $data) {
+            if (str_contains($r, $keyword)) {
+                return ['name' => $data[0], 'slug' => $data[1]];
+            }
+        }
+
+        // Fallback: If it's totally unknown, title case the clean base string
+        $fallbackName = ucwords(trim(str_replace([' mix', ' cross'], '', $r)));
+        if (empty($fallbackName)) {
+            return ['name' => 'Mixed Breed', 'slug' => 'mixed-breed'];
+        }
+        $fallbackSlug = strtolower(preg_replace('/[^a-z0-9]+/', '-', $fallbackName));
+        return ['name' => $fallbackName, 'slug' => $fallbackSlug];
     }
 }
 
@@ -192,7 +260,11 @@ if (!function_exists('upsertDog')) {
     function upsertDog(PDO $db, array $d): string {
         if (empty($d['external_id']) || empty($d['name'])) return 'error';
 
-        $breedName = ucwords(strtolower(substr(trim($d['breed_name'] ?? 'Mixed Breed') ?: 'Mixed Breed', 0, 100)));
+        // MAGIC PARSER: Automatically processes and structures the breed string
+        $breedData = normalizeForedogBreed($d['breed_name'] ?? 'Mixed Breed');
+        $breedName = substr($breedData['name'], 0, 100);
+        $breedSlug = substr($breedData['slug'], 0, 100);
+
         // Database age remains pure, we do not double-normalize here!
         $age = substr(trim($d['age'] ?? '3 - 7 Years'), 0, 50); 
         $color = ucwords(strtolower(substr(trim($d['color'] ?? 'Unknown'), 0, 50)));
@@ -229,7 +301,7 @@ if (!function_exists('upsertDog')) {
                 ':source_url'          => $d['source_url'] ?? '',
                 ':source_state'        => strtolower(trim($d['source_state'] ?? '')),
                 ':name'                => substr($d['name'], 0, 100),
-                ':breed_slug'          => substr(breedSlug($breedName), 0, 100),
+                ':breed_slug'          => $breedSlug,
                 ':breed_name'          => $breedName,
                 ':location'            => substr($d['location'] ?? '', 0, 255),
                 ':city'                => substr($d['city'] ?? '', 0, 100),

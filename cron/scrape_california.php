@@ -77,9 +77,9 @@ foreach ($json as $d) {
         'description'    => $desc,
         'image_url'      => $cleanImages[0] ?? '',
         'gallery_urls'   => json_encode($cleanImages),
-        'owner_contact_name'  => 'Foredog Matchmaking',
-        'owner_contact_phone' => 'N/A',
-        'owner_contact_email' => 'hello@foredog.com',
+        'owner_contact_name'  => 'Pasadena Humane',
+        'owner_contact_phone' => '(626) 792-7151',
+        'owner_contact_email' => 'hello@pasadenahumane.org',
     ]);
 
     if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
@@ -144,9 +144,9 @@ if ($indexHtml) {
             'description'    => $desc,
             'image_url'      => $cleanImages[0] ?? '',
             'gallery_urls'   => json_encode($cleanImages),
-            'owner_contact_name'  => 'Foredog Matchmaking',
-            'owner_contact_phone' => 'N/A',
-            'owner_contact_email' => 'hello@foredog.com',
+            'owner_contact_name'  => 'Wags and Walks',
+            'owner_contact_phone' => '(866) 588-9247',
+            'owner_contact_email' => 'adopt@wagsandwalks.org',
         ]);
 
         if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
@@ -212,9 +212,9 @@ if ($indexHtml) {
             'description'    => $desc,
             'image_url'      => $cleanImages[0] ?? '',
             'gallery_urls'   => json_encode($cleanImages),
-            'owner_contact_name'  => 'Foredog Matchmaking',
-            'owner_contact_phone' => 'N/A',
-            'owner_contact_email' => 'hello@foredog.com',
+            'owner_contact_name'  => 'Muttville Senior Dog Rescue',
+            'owner_contact_phone' => '(415) 272-4172',
+            'owner_contact_email' => 'adoptions@muttville.org',
         ]);
 
         if ($res === 'inserted') $s++; elseif ($res === 'updated') $u++; else $e++;
